@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chimpanzee Memory Test – Erweiterte Version</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin-top: 30px;
+    }
+    #controls {
+      margin-bottom: 20px;
+    }
+    #gridContainer {
+      display: flex;
+      justify-content: center;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, 60px);
+      grid-template-rows: repeat(5, 60px);
+      gap: 5px;
+    }
+    .cell {
+      width: 60px;
+      height: 60px;
+      background-color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 20px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+    }
+    .hidden {
+      color: transparent;
+    }
+    .active {
+      background-color: #ddd;
+    }
+    .correct {
+      background-color: #8f8;
+    }
+    .wrong {
+      background-color: #f88;
+    }
+    #startRestartButton {
+      margin-top: 10px;
+      margin-bottom: 20px;
+    }
+    #counterDisplay, #levelDisplay {
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+    #chartContainer {
+      width: 80%;
+      margin: 20px auto;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label>Kachelanzahl: <input type="number" id="tileCount" value="6" min="1" max="25" /></label>
+    <label>Anzeigedauer (Sek.): <input type="number" id="displayTime" value="5" min="1" max="10" /></label>
+    <label>Modus:
+      <select id="mode">
+        <option value="train">Trainingsmodus</option>
+        <option value="test">Testmodus</option>
+      </select>
+    </label>
+  </div>
+  <div id="counterDisplay" style="margin-bottom: 20px;">Gesamtspiele: 0</div>
+  <button id="startRestartButton" onclick="startTest()">Start</button>
+  <div id="levelDisplay">Aktuelles Level: 6</div>
+  <div id="gridContainer">
+    <div id="grid" class="grid"></div>
+  </div>
+  <a id="downloadLink" style="display:none; margin-top: 10px; display: block">CSV herunterladen</a>
+  <div id="chartContainer">
+    <canvas id="progressChart"></canvas>
+  </div>
+
+  <script>
+    const gridElement = document.getElementById("grid");
+    const startRestartButton = document.getElementById("startRestartButton");
+    const counterDisplay = document.getElementById("counterDisplay");
+    const levelDisplay = document.getElementById("levelDisplay");
+    const downloadLink = document.getElementById("downloadLink");
+
+    let sequence = [];
+    let current = 1;
+    let clickTimeout;
+    let totalCount = 0;
+    let clickStartTime = 0;
+    let csvData = ["Zeitpunkt,Kacheln,Anzeigedauer,Modus,Erfolg,Klickzeit(ms),Fehlerposition"];
+    let levelHistory = [];
+
+    const ctx = document.getElementById('progressChart').getContext('2d');
+    const progressChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Level-Verlauf',
+          data: [],
+          borderColor: 'blue',
+          backgroundColor: 'lightblue',
+          fill: false,
+          tension: 0.2
+        }]
+      },
+      options: {
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'Level' } },
+          x: { title: { display: true, text: 'Versuch' } }
+        }
+      }
+    });
+
+    function updateCounterDisplay() {
+      counterDisplay.textContent = `Gesamtspiele: ${totalCount}`;
+    }
+
+    function updateLevelDisplay(next = false) {
+      const level = document.getElementById("tileCount").value;
+      levelDisplay.textContent = `${next ? "Nächstes" : "Aktuelles"} Level: ${level}`;
+    }
+
+    function updateChart(level) {
+      levelHistory.push(level);
+      progressChart.data.labels.push(levelHistory.length);
+      progressChart.data.datasets[0].data.push(level);
+      progressChart.update();
+    }
+
+    function startTest() {
+      const tileCount = parseInt(document.getElementById("tileCount").value);
+      const displayTime = parseInt(document.getElementById("displayTime").value) * 1000;
+      const mode = document.getElementById("mode").value;
+
+      totalCount++;
+      updateCounterDisplay();
+      updateLevelDisplay();
+      startRestartButton.textContent = "Start";
+
+      gridElement.innerHTML = "";
+      sequence = [];
+      current = 1;
+      clearTimeout(clickTimeout);
+
+      const cells = [];
+      for (let i = 0; i < 25; i++) {
+        const div = document.createElement("div");
+        div.className = "cell";
+        div.dataset.index = i;
+        gridElement.appendChild(div);
+        cells.push(div);
+      }
+
+      const positions = [...Array(25).keys()].sort(() => 0.5 - Math.random()).slice(0, tileCount);
+      positions.forEach((pos, i) => {
+        const num = i + 1;
+        sequence.push({ pos, num });
+        cells[pos].textContent = num;
+        cells[pos].classList.add("active");
+        cells[pos].onclick = () => handleClick(cells[pos], num);
+      });
+
+      setTimeout(() => {
+        positions.forEach(pos => {
+          cells[pos].classList.add("hidden");
+        });
+        clickStartTime = Date.now();
+        startClickTimer(tileCount);
+      }, displayTime);
+
+      cells.forEach((cell, i) => {
+        if (!positions.includes(i)) {
+          cell.style.visibility = "hidden";
+        }
+      });
+    }
+
+    function startClickTimer(tileCount) {
+      const mode = document.getElementById("mode").value;
+      if (mode === "test") {
+        clickTimeout = setTimeout(() => {
+          logResult(false, sequence.length, Date.now() - clickStartTime);
+          updateChart(parseInt(document.getElementById("tileCount").value));
+          endTest("Zeit abgelaufen. Bitte versuche es erneut.");
+        }, tileCount * 1000);
+      }
+    }
+
+    function handleClick(cell, num) {
+      if (!cell.classList.contains("hidden")) return;
+      if (parseInt(cell.textContent) === current) {
+        cell.classList.remove("hidden");
+        cell.classList.add("correct");
+        current++;
+        if (current > sequence.length) {
+          clearTimeout(clickTimeout);
+          logResult(true, sequence.length, Date.now() - clickStartTime);
+          let newLevel = parseInt(document.getElementById("tileCount").value) + 1;
+          document.getElementById("tileCount").value = newLevel;
+          updateLevelDisplay(true);
+          updateChart(newLevel);
+          alert("Gut gemacht!");
+        }
+      } else {
+        clearTimeout(clickTimeout);
+        cell.classList.remove("hidden");
+        cell.classList.add("wrong");
+        logResult(false, current, Date.now() - clickStartTime);
+        updateChart(parseInt(document.getElementById("tileCount").value));
+        endTest("Falsche Reihenfolge. Test neu starten.");
+      }
+    }
+
+    function endTest(message) {
+      alert(message);
+      gridElement.innerHTML = "";
+      startRestartButton.textContent = "Restart";
+      updateLevelDisplay();
+    }
+
+    function logResult(success, errorPosition, clickTime) {
+      const tileCount = document.getElementById("tileCount").value;
+      const displayTime = document.getElementById("displayTime").value;
+      const mode = document.getElementById("mode").value;
+      const now = new Date().toISOString();
+      csvData.push(`${now},${tileCount},${displayTime},${mode},${success},${clickTime},${success ? '' : errorPosition}`);
+      updateDownloadLink();
+    }
+
+    function updateDownloadLink() {
+      const blob = new Blob([csvData.join("\n")], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      downloadLink.href = url;
+      downloadLink.download = 'chimp_test_data.csv';
+      downloadLink.style.display = 'block';
+    }
+
+    document.getElementById("tileCount").addEventListener("input", () => {
+      startRestartButton.textContent = "Start";
+      updateLevelDisplay();
+    });
+    document.getElementById("displayTime").addEventListener("input", () => {
+      startRestartButton.textContent = "Start";
+    });
+    document.getElementById("mode").addEventListener("change", () => {
+      startRestartButton.textContent = "Start";
+    });
+  </script>
+</body>
+</html>
