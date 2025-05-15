@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chimpanzee Memory Test – Erweiterte Version</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#000000">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
@@ -255,5 +257,12 @@
       startRestartButton.textContent = "Start";
     });
   </script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js')
+      .then(() => console.log('Service Worker registered.'))
+      .catch((error) => console.error('Service Worker registration failed:', error));
+  }
+</script>
 </body>
 </html>
